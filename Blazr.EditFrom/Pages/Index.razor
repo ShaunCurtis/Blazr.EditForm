@@ -1,0 +1,61 @@
+﻿@page "/"
+@inject CountryEditorPresenter Presenter
+@inject NavigationManager NavManager
+@implements IDisposable
+
+<PageTitle>Index</PageTitle>
+<EditForm EditContext=_editContext>
+    <div class="mb-2">
+        <label class="form-label">Country</label>
+        <input class="form-control" @bind="this.Presenter.Record.Name" @bind:event="oninput" />
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Code</label>
+        <input class="form-control" @bind=this.Presenter.Record.Code @bind:event="oninput" />
+    </div>
+    <div class="mb-2 text-end">
+        <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
+        <button class="btn btn-danger" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
+        <button class="btn btn-dark" disabled="@(this.Presenter.Record.IsDirty)" @onclick="this.Exit">Exit</button>
+    </div>
+</EditForm>
+
+<NavigationLock ConfirmExternalNavigation="this.Presenter.Record.IsDirty"  />
+
+@code {
+    private EditContext _editContext = default!;
+    private IDisposable? _navLockerDispose;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _editContext = new EditContext(Presenter.Record);
+        await Presenter.GetItemAsync(Guid.NewGuid());
+        _navLockerDispose = NavManager.RegisterLocationChangingHandler(this.CheckFromState);
+    }
+
+    private ValueTask CheckFromState(LocationChangingContext context)
+    {
+        if (this.Presenter.Record.IsDirty)
+            context.PreventNavigation();
+
+        return ValueTask.CompletedTask;
+    }
+
+    private async Task Save()
+        => await this.Presenter.SaveItemAsync();
+
+    private Task Exit()
+    {
+        // Exit to where?
+        return Task.CompletedTask;
+    }
+
+    private Task ExitWithoutSave()
+    {
+        this.Presenter.Record.Reset();
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+        => _navLockerDispose?.Dispose();
+}
