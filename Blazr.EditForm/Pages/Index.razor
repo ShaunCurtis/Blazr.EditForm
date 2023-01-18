@@ -7,11 +7,11 @@
 <EditForm EditContext=_editContext>
     <div class="mb-2">
         <label class="form-label">Country</label>
-        <input class="form-control" @bind="this.Presenter.Record.Name" @bind:event="oninput" />
+        <BlazrInputText class="form-control" @bind-value="this.Presenter.Record.Name"/>
     </div>
     <div class="mb-2">
         <label class="form-label">Code</label>
-        <input class="form-control" @bind=this.Presenter.Record.Code @bind:event="oninput" />
+        <BlazrInputText class="form-control" @bind-value=this.Presenter.Record.Code />
     </div>
     <div class="mb-2 text-end">
         <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>

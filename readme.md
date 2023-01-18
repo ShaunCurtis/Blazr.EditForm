@@ -126,20 +126,15 @@ The form locking is accomplished by:
 2. Adding a `NavigationLock` component to the form and wiring it up to the form state. This prevents external navigation including using the back button.
 
 ```html
-@page "/"
-@inject CountryEditorPresenter Presenter
-@inject NavigationManager NavManager
-@implements IDisposable
-
 <PageTitle>Index</PageTitle>
 <EditForm EditContext=_editContext>
     <div class="mb-2">
         <label class="form-label">Country</label>
-        <input class="form-control" @bind="this.Presenter.Record.Name" @bind:event="oninput" />
+        <BlazrInputText class="form-control" @bind-value="this.Presenter.Record.Name"/>
     </div>
     <div class="mb-2">
         <label class="form-label">Code</label>
-        <input class="form-control" @bind=this.Presenter.Record.Code @bind:event="oninput" />
+        <BlazrInputText class="form-control" @bind-value=this.Presenter.Record.Code />
     </div>
     <div class="mb-2 text-end">
         <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
@@ -188,6 +183,18 @@ The form locking is accomplished by:
     public void Dispose()
         => _navLockerDispose?.Dispose();
 }
+```
+
+For reference this is `RazrInputText`
+
+```html
+@namespace Blazr.EditForm
+@inherits InputText
+
+<input @attributes="AdditionalAttributes"
+       class="@CssClass"
+       @bind="CurrentValueAsString"
+       @bind:event="oninput" />
 ```
 
 Note that the navigation features used to prevent navigation are new to Net7.0.
