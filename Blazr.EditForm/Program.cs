@@ -1,4 +1,6 @@
 using Blazr.EditForm.Data;
+using FluentValidation;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +10,7 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddSingleton<WeatherForecastService>();
 builder.Services.AddScoped<ICountryDataBroker, CountryAPIDataBroker>();
 builder.Services.AddTransient<CountryEditorPresenter>();
-
+builder.Services.AddTransient<IValidator<CountryEditContext>, CountryValidator>();
 
 var app = builder.Build();
 

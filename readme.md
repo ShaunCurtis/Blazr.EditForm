@@ -1,10 +1,10 @@
 Question
 
->> How do you prevent navigation away from an edit form in Blazor when the data is dirty?
+>> How do you prevent navigation from an edit form in Blazor when the form data is dirty?
 
-When you read data from a data source such as an API, the data you receive is read only.  You should therefore treat it as immutable, and use `record` objects rather than `class` objects to represent that data.
+When you read data from a data source such as an API, the data you receive is read only.  Treat it as immutable, using `record` objects rather than `class` objects to represent the data.
 
-This is my demo record.  It a simple record of the Name and registration code for a country.  Note that all the properties are declared as immutable.
+This is my demo record.  It's a simple record of the name and registration code for a country.  All the properties are declared as immutable.
 
 ```csharp
 public record DboCountry
@@ -45,7 +45,7 @@ public class CountryAPIDataBroker
 }
 ```
 
-We need an editable version of `DboCountry`.  This is where using  `record` objects comes into it's own.  Cloning and equality checking is easy.  We save a copy of the original record used to create the record and can compare this original against a record we generate dynamically (based on the current values) to check record state.  You can add validation to this class or build the necessary fluid validation classes from it.
+We need an editable version of `DboCountry`.  This is where using  `record` objects comes into it's own.  Cloning and equality checking is easy.  We save a copy of the original record used to create the record and use this to test state by comparing it against a record we generate dynamically from the current values.  You can add validation to this class or build the necessary fluid validation classes from it.  I've added Fluent Validation to demonstrate,
 
 ```csharp
 public class CountryEditContext
@@ -83,7 +83,7 @@ public class CountryEditContext
 
 Next our Presentation layer service.
 
-This holds all and manages the data used by the edit form.  The `CountryEditContext` is readonly so can't be replaced during the lifetime of the presenter.  The presenter is a `Transient` service, so it's important not to do anything in it that requires implementing `IDisposable`.
+This holds and manages the data used by the edit form.  The `CountryEditContext` is readonly so can't be replaced during the lifetime of the presenter.  The presenter is a `Transient` service, so it's important not to do anything in it that requires implementing `IDisposable`.
 
 ```csharp
 public class CountryEditorPresenter
@@ -111,14 +111,15 @@ public class CountryEditorPresenter
 }
 ```
 
-The two services are registered as follows:
+The services are registered as follows:
 
 ```csharp
 builder.Services.AddScoped<ICountryDataBroker, CountryAPIDataBroker>();
 builder.Services.AddTransient<CountryEditorPresenter>();
+builder.Services.AddTransient<IValidator<CountryEditContext>, CountryValidator>();
 ```
 
-Finally the edit form.  It'a a normal form with the buttons being enabled/disabled by the record edit state.  
+Finally the edit form.  It's a normal form with the button state controlled by the record edit state.  
 
 The form locking is accomplished by:
 
@@ -126,20 +127,31 @@ The form locking is accomplished by:
 2. Adding a `NavigationLock` component to the form and wiring it up to the form state. This prevents external navigation including using the back button.
 
 ```html
+@page "/"
+@inject CountryEditorPresenter Presenter
+@inject NavigationManager NavManager
+@implements IDisposable
+
 <PageTitle>Index</PageTitle>
 <EditForm EditContext=_editContext>
+    <FluentValidationValidator DisableAssemblyScanning="@true" />
     <div class="mb-2">
         <label class="form-label">Country</label>
-        <BlazrInputText class="form-control" @bind-value="this.Presenter.Record.Name"/>
+        <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name"/>
+        <ValidationMessage For="() => this.Presenter.Record.Name"/>
     </div>
     <div class="mb-2">
         <label class="form-label">Code</label>
-        <BlazrInputText class="form-control" @bind-value=this.Presenter.Record.Code />
+        <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
+        <ValidationMessage For="() => this.Presenter.Record.Code" />
     </div>
     <div class="mb-2 text-end">
         <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
         <button class="btn btn-danger" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
         <button class="btn btn-dark" disabled="@(this.Presenter.Record.IsDirty)" @onclick="this.Exit">Exit</button>
+    </div>
+    <div class="mb-2">
+        <ValidationSummary />
     </div>
 </EditForm>
 
@@ -185,7 +197,9 @@ The form locking is accomplished by:
 }
 ```
 
-For reference this is `RazrInputText`
+### For reference 
+
+This is `RazrInputText`:
 
 ```html
 @namespace Blazr.EditForm
@@ -195,6 +209,24 @@ For reference this is `RazrInputText`
        class="@CssClass"
        @bind="CurrentValueAsString"
        @bind:event="oninput" />
+```
+
+This is `CountryValidator`:
+
+```csharp
+public class CountryValidator : AbstractValidator<CountryEditContext>
+{
+    public CountryValidator()
+    {
+        RuleFor(p => p.Name)
+        .NotEmpty().WithMessage("You must enter a Name")
+        .MaximumLength(50).WithMessage("Name cannot be longer than 50 characters");
+
+        RuleFor(p => p.Code)
+        .NotEmpty().WithMessage("You must enter a Code for the Country")
+        .MaximumLength(4).WithMessage("A country code is 1, 2, 3 or 4 letters");
+    }
+}
 ```
 
 Note that the navigation features used to prevent navigation are new to Net7.0.

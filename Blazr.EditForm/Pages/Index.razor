@@ -5,18 +5,24 @@
 
 <PageTitle>Index</PageTitle>
 <EditForm EditContext=_editContext>
+    <FluentValidationValidator DisableAssemblyScanning="@true" />
     <div class="mb-2">
         <label class="form-label">Country</label>
-        <BlazrInputText class="form-control" @bind-value="this.Presenter.Record.Name"/>
+        <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name"/>
+        <ValidationMessage For="() => this.Presenter.Record.Name"/>
     </div>
     <div class="mb-2">
         <label class="form-label">Code</label>
-        <BlazrInputText class="form-control" @bind-value=this.Presenter.Record.Code />
+        <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
+        <ValidationMessage For="() => this.Presenter.Record.Code" />
     </div>
     <div class="mb-2 text-end">
         <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
         <button class="btn btn-danger" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
         <button class="btn btn-dark" disabled="@(this.Presenter.Record.IsDirty)" @onclick="this.Exit">Exit</button>
+    </div>
+    <div class="mb-2">
+        <ValidationSummary />
     </div>
 </EditForm>
 

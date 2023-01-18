@@ -6,7 +6,7 @@ public interface ICountryDataBroker
     public ValueTask<bool> SaveItemAsync(DboCountry item);
 }
 
-public class CountryAPIDataBroker
+public class CountryAPIDataBroker : ICountryDataBroker
 {
     // Normally inject the HttpClient 
     public CountryAPIDataBroker() { }
