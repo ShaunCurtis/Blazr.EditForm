@@ -1,65 +1,113 @@
 ﻿@page "/"
 @inject CountryEditorPresenter Presenter
 @inject NavigationManager NavManager
+@inject IJSRuntime Js
 @implements IDisposable
 
-<PageTitle>Index</PageTitle>
-<EditForm EditContext=_editContext>
-    <FluentValidationValidator DisableAssemblyScanning="@true" />
-    <div class="mb-2">
-        <label class="form-label">Country</label>
-        <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name"/>
-        <ValidationMessage For="() => this.Presenter.Record.Name"/>
-    </div>
-    <div class="mb-2">
-        <label class="form-label">Code</label>
-        <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
-        <ValidationMessage For="() => this.Presenter.Record.Code" />
-    </div>
-    <div class="mb-2 text-end">
-        <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
-        <button class="btn btn-danger" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
-        <button class="btn btn-dark" disabled="@(this.Presenter.Record.IsDirty)" @onclick="this.Exit">Exit</button>
-    </div>
-    <div class="mb-2">
-        <ValidationSummary />
-    </div>
-</EditForm>
+@if (_editContext is null)
+{
+    <div class="alert alert-info">Loading</div>
+}
+else
+{
+    <PageTitle>Index</PageTitle>
+    <EditForm EditContext=_editContext>
+        <FluentValidationValidator DisableAssemblyScanning="@true" />
+        <BlazrEditStateTracker />
+        <div class="mb-2">
+            <label class="form-label">Country</label>
+            <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name" />
+            <ValidationMessage For="() => this.Presenter.Record.Name" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Code</label>
+            <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
+            <ValidationMessage For="() => this.Presenter.Record.Code" />
+        </div>
+        <div class="mb-2 text-end">
+            <button class="btn btn-warning" hidden="@_isClean" @onclick="this.Reset">Reset</button>
+            <button class="btn btn-success" disabled="@_isClean" @onclick="this.Save">Save</button>
+            <button class="btn btn-danger" hidden="@_isClean" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
+            <button class="btn btn-dark" hidden="@_isDirty" @onclick="this.Exit">Exit</button>
+        </div>
+        <div class="mb-2">
+            <ValidationSummary />
+        </div>
+    </EditForm>
 
-<NavigationLock ConfirmExternalNavigation="this.Presenter.Record.IsDirty"  />
+    <NavigationLock ConfirmExternalNavigation="_isDirty" />
+}
 
 @code {
     private EditContext _editContext = default!;
     private IDisposable? _navLockerDispose;
+    private BlazrEditStateStore? _editStateStore => _editContext?.GetStateStore();
+    private bool _isDirty => _editStateStore?.IsDirty() ?? false;
+    private bool _isClean => !_isDirty;
 
     protected override async Task OnInitializedAsync()
     {
-        _editContext = new EditContext(Presenter.Record);
         await Presenter.GetItemAsync(Guid.NewGuid());
-        _navLockerDispose = NavManager.RegisterLocationChangingHandler(this.CheckFromState);
+        _editContext = new EditContext(Presenter.Record);
+        _navLockerDispose = NavManager.RegisterLocationChangingHandler(this.OnLocationChanging);
     }
 
-    private ValueTask CheckFromState(LocationChangingContext context)
+    private ValueTask OnLocationChanging(LocationChangingContext context)
     {
-        if (this.Presenter.Record.IsDirty)
+        // Prevent navigation if the edit context is dirty
+        if (_isDirty)
             context.PreventNavigation();
 
         return ValueTask.CompletedTask;
     }
 
     private async Task Save()
-        => await this.Presenter.SaveItemAsync();
-
-    private Task Exit()
     {
-        // Exit to where?
-        return Task.CompletedTask;
+        if (_isClean)
+            return;
+
+        // Validate the form
+        if (_editContext?.Validate() ?? false)
+        {
+            await this.Presenter.SaveItemAsync();
+            // mock an async call to the data pipeline to save the record
+            var updatedRecord = this.Presenter.Record.AsRecord;
+            await Task.Delay(100);
+            // Error handling code here
+
+            // This will reset the edit context and the EditStateTracker
+            _editContext = new EditContext(this.Presenter.Record);
+        }
+
     }
 
-    private Task ExitWithoutSave()
+    private void Reset()
     {
-        this.Presenter.Record.Reset();
-        return Task.CompletedTask;
+        if (_isClean)
+            return;
+
+        this.Presenter.Reset();
+            _editStateStore?.Reset();
+    }
+
+    private void Exit()
+    {
+        // Belt and braces check before exiting
+        if (_isClean)
+            this.NavManager.NavigateTo("/counter");
+    }
+
+    private async Task ExitWithoutSave()
+    {
+        // Confirm with a Js Confirm popup
+        bool confirmed = await Js.InvokeAsync<bool>("confirm", "Are you sure you want to exit without saving?");
+
+        if (confirmed)
+        {
+            // Reset the EditStateStore - it will now be clean, so we can exit
+            _editStateStore?.Reset();
+            this.NavManager.NavigateTo("/counter");
+        }
     }
 
     public void Dispose()

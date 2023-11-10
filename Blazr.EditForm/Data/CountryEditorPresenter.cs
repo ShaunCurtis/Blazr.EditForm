@@ -4,7 +4,7 @@ public class CountryEditorPresenter
 {
     private ICountryDataBroker _broker;
 
-    public readonly CountryEditContext Record = new CountryEditContext(new());
+    public CountryEditContext Record { get; private set; } = new(new());
 
     public CountryEditorPresenter(ICountryDataBroker broker)
         => _broker = broker;
@@ -12,14 +12,27 @@ public class CountryEditorPresenter
     public async ValueTask<bool> GetItemAsync(Guid uid)
     {
         var record = await _broker.GetItemAsync(uid);
+
         //Logic to check we got a record
-        this.Record.Load(record);
+
+        // Create a new record edit context
+        this.Record = new(record);
+        
         return true;
     }
 
     public async ValueTask<bool> SaveItemAsync()
     {
-        await _broker.SaveItemAsync(this.Record.AsRecord);
+        // Get the record to save
+        var saveRecord = this.Record.AsRecord;
+        await _broker.SaveItemAsync(saveRecord);
+
+        // Create a new record edit context
+        this.Record = new(saveRecord);
+
         return true;
     }
+
+    public void Reset()
+        => this.Record.Reset();
 }

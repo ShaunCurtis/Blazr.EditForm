@@ -1,23 +1,23 @@
-﻿namespace Blazr.EditForm.Data;
+﻿using Blazr.Core;
+
+namespace Blazr.EditForm.Data;
 
 public class CountryEditContext
 {
+    private DboCountry _baseRecord;
     public Guid Uid { get; private set; } = Guid.NewGuid();
-    public string Name { get; set; } = string.Empty;
-    public string Code { get; set; } = string.Empty;
+    [TrackState] public string Name { get; set; } = string.Empty;
+    [TrackState] public string Code { get; set; } = string.Empty;
 
-    public DboCountry BaseRecord { get; private set; } = new DboCountry();
-    public bool IsDirty => BaseRecord != this.AsRecord;
-
-    public CountryEditContext(DboCountry record) 
-        => this.Load(record);
-
-    public void Reset()
-        => this.Load(this.BaseRecord);
+    public CountryEditContext(DboCountry record)
+    {
+        _baseRecord = record;
+        this.Load(record);
+    }
 
     public void Load(DboCountry record) 
     {
-        this.BaseRecord = record with { };
+        _baseRecord = record;
         this.Uid= record.Uid;
         this.Name= record.Name;
         this.Code= record.Code;
@@ -30,4 +30,7 @@ public class CountryEditContext
             Name= this.Name,
             Code= this.Code,
         };
+
+    public void Reset()
+        => this.Load(_baseRecord);
 }

@@ -1,8 +1,10 @@
 Question
 
->> How do you prevent navigation from an edit form in Blazor when the form data is dirty?
+>> How do you prevent navigation when an edit form is dirty?
 
-When you read data from a data source such as an API, the data you receive is read only.  Treat it as immutable, using `record` objects rather than `class` objects to represent the data.
+This article demonstrates how to do so.
+
+Data derived from any data source, such as an API or database, should be read only.  It's a copy of the originsl data at thr time it was copied.  It's not the original data.  Treat it as immutable, use a  `record` value object rather than `class` objects to represent the data.
 
 This is my demo record.  It's a simple record of the name and registration code for a country.  All the properties are declared as immutable.
 
@@ -15,7 +17,7 @@ public record DboCountry
 }
 ```
 
-We can generate a simple dummy data pipeline for this record with get and save async methods that would normally make API calls.
+I've built a simple dummy data pipeline with get and save async methods to emulate normal API calls.
 
 ```csharp
 public interface ICountryDataBroker
@@ -45,27 +47,25 @@ public class CountryAPIDataBroker
 }
 ```
 
-We need an editable version of `DboCountry`.  This is where using  `record` objects comes into it's own.  Cloning and equality checking is easy.  We save a copy of the original record used to create the record and use this to test state by comparing it against a record we generate dynamically from the current values.  You can add validation to this class or build the necessary fluid validation classes from it.  I've added Fluent Validation to demonstrate,
+To edit a `DboCountry` record we need an editable object.  You can add validation to this class or build the necessary fluid validation classes from it.  I've added Fluent Validation to demonstrate,
 
 ```csharp
 public class CountryEditContext
 {
+    private DboCountry _baseRecord;
     public Guid Uid { get; private set; } = Guid.NewGuid();
-    public string Name { get; set; } = string.Empty;
-    public string Code { get; set; } = string.Empty;
+    [TrackState] public string Name { get; set; } = string.Empty;
+    [TrackState] public string Code { get; set; } = string.Empty;
 
-    public DboCountry BaseRecord { get; private set; } = new DboCountry();
-    public bool IsDirty => BaseRecord != this.AsRecord;
-
-    public CountryEditContext(DboCountry record) 
-        => this.Load(record);
-
-    public void Reset()
-        => this.Load(this.BaseRecord);
+    public CountryEditContext(DboCountry record)
+    {
+        _baseRecord = record;
+        this.Load(record);
+    }
 
     public void Load(DboCountry record) 
     {
-        this.BaseRecord = record with { };
+        _baseRecord = record;
         this.Uid= record.Uid;
         this.Name= record.Name;
         this.Code= record.Code;
@@ -78,36 +78,50 @@ public class CountryEditContext
             Name= this.Name,
             Code= this.Code,
         };
+
+    public void Reset()
+        => this.Load(_baseRecord);
 }
 ```
 
-Next our Presentation layer service.
-
-This holds and manages the data used by the edit form.  The `CountryEditContext` is readonly so can't be replaced during the lifetime of the presenter.  The presenter is a `Transient` service, so it's important not to do anything in it that requires implementing `IDisposable`.
+Next we need a Presentation layer servive to hold and manage the data used by the edit form.  The presenter is a `Transient` service, so it's important not to do anything in it that requires implementing `IDisposable`.
 
 ```csharp
 public class CountryEditorPresenter
 {
     private ICountryDataBroker _broker;
 
-    public readonly CountryEditContext Record = new CountryEditContext(new());
+    public CountryEditContext Record { get; private set; } = new(new());
 
-    public CountryEditorPresenter(CountryDataBroker broker)
+    public CountryEditorPresenter(ICountryDataBroker broker)
         => _broker = broker;
 
     public async ValueTask<bool> GetItemAsync(Guid uid)
     {
         var record = await _broker.GetItemAsync(uid);
+
         //Logic to check we got a record
-        this.Record.Load(record);
+
+        // Create a new record edit context
+        this.Record = new(record);
+        
         return true;
     }
 
     public async ValueTask<bool> SaveItemAsync()
     {
-        await _broker.SaveItemAsync(this.Record.AsRecord);
+        // Get the record to save
+        var saveRecord = this.Record.AsRecord;
+        await _broker.SaveItemAsync(saveRecord);
+
+        // Create a new record edit context
+        this.Record = new(saveRecord);
+
         return true;
     }
+
+    public void Reset()
+        => this.Record.Reset();
 }
 ```
 
@@ -130,66 +144,113 @@ The form locking is accomplished by:
 @page "/"
 @inject CountryEditorPresenter Presenter
 @inject NavigationManager NavManager
+@inject IJSRuntime Js
 @implements IDisposable
 
-<PageTitle>Index</PageTitle>
-<EditForm EditContext=_editContext>
-    <FluentValidationValidator DisableAssemblyScanning="@true" />
-    <div class="mb-2">
-        <label class="form-label">Country</label>
-        <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name"/>
-        <ValidationMessage For="() => this.Presenter.Record.Name"/>
-    </div>
-    <div class="mb-2">
-        <label class="form-label">Code</label>
-        <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
-        <ValidationMessage For="() => this.Presenter.Record.Code" />
-    </div>
-    <div class="mb-2 text-end">
-        <button class="btn btn-success" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.Save">Save</button>
-        <button class="btn btn-danger" disabled="@(!this.Presenter.Record.IsDirty)" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
-        <button class="btn btn-dark" disabled="@(this.Presenter.Record.IsDirty)" @onclick="this.Exit">Exit</button>
-    </div>
-    <div class="mb-2">
-        <ValidationSummary />
-    </div>
-</EditForm>
+@if (_editContext is null)
+{
+    <div class="alert alert-info">Loading</div>
+}
+else
+{
+    <PageTitle>Index</PageTitle>
+    <EditForm EditContext=_editContext>
+        <FluentValidationValidator DisableAssemblyScanning="@true" />
+        <BlazrEditStateTracker />
+        <div class="mb-2">
+            <label class="form-label">Country</label>
+            <BlazrInputText class="form-control" @bind-Value="this.Presenter.Record.Name" />
+            <ValidationMessage For="() => this.Presenter.Record.Name" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Code</label>
+            <BlazrInputText class="form-control" @bind-Value=this.Presenter.Record.Code />
+            <ValidationMessage For="() => this.Presenter.Record.Code" />
+        </div>
+        <div class="mb-2 text-end">
+            <button class="btn btn-warning" hidden="@_isClean" @onclick="this.Reset">Reset</button>
+            <button class="btn btn-success" disabled="@_isClean" @onclick="this.Save">Save</button>
+            <button class="btn btn-danger" hidden="@_isClean" @onclick="this.ExitWithoutSave">Exit Without Saving</button>
+            <button class="btn btn-dark" hidden="@_isDirty" @onclick="this.Exit">Exit</button>
+        </div>
+        <div class="mb-2">
+            <ValidationSummary />
+        </div>
+    </EditForm>
 
-<NavigationLock ConfirmExternalNavigation="this.Presenter.Record.IsDirty"  />
-```
-```csharp
+    <NavigationLock ConfirmExternalNavigation="_isDirty" />
+}
+
 @code {
     private EditContext _editContext = default!;
     private IDisposable? _navLockerDispose;
+    private BlazrEditStateStore? _editStateStore => _editContext?.GetStateStore();
+    private bool _isDirty => _editStateStore?.IsDirty() ?? false;
+    private bool _isClean => !_isDirty;
 
     protected override async Task OnInitializedAsync()
     {
-        _editContext = new EditContext(Presenter.Record);
         await Presenter.GetItemAsync(Guid.NewGuid());
-        _navLockerDispose = NavManager.RegisterLocationChangingHandler(this.CheckFromState);
+        _editContext = new EditContext(Presenter.Record);
+        _navLockerDispose = NavManager.RegisterLocationChangingHandler(this.OnLocationChanging);
     }
 
-    private ValueTask CheckFromState(LocationChangingContext context)
+    private ValueTask OnLocationChanging(LocationChangingContext context)
     {
-        if (this.Presenter.Record.IsDirty)
+        // Prevent navigation if the edit context is dirty
+        if (_isDirty)
             context.PreventNavigation();
 
         return ValueTask.CompletedTask;
     }
 
     private async Task Save()
-        => await this.Presenter.SaveItemAsync();
-
-    private Task Exit()
     {
-        // Exit to where?
-        return Task.CompletedTask;
+        if (_isClean)
+            return;
+
+        // Validate the form
+        if (_editContext?.Validate() ?? false)
+        {
+            await this.Presenter.SaveItemAsync();
+            // mock an async call to the data pipeline to save the record
+            var updatedRecord = this.Presenter.Record.AsRecord;
+            await Task.Delay(100);
+            // Error handling code here
+
+            // This will reset the edit context and the EditStateTracker
+            _editContext = new EditContext(this.Presenter.Record);
+        }
+
     }
 
-    private Task ExitWithoutSave()
+    private void Reset()
     {
-        this.Presenter.Record.Reset();
-        return Task.CompletedTask;
+        if (_isClean)
+            return;
+
+        this.Presenter.Reset();
+            _editStateStore?.Reset();
+    }
+
+    private void Exit()
+    {
+        // Belt and braces check before exiting
+        if (_isClean)
+            this.NavManager.NavigateTo("/counter");
+    }
+
+    private async Task ExitWithoutSave()
+    {
+        // Confirm with a Js Confirm popup
+        bool confirmed = await Js.InvokeAsync<bool>("confirm", "Are you sure you want to exit without saving?");
+
+        if (confirmed)
+        {
+            // Reset the EditStateStore - it will now be clean, so we can exit
+            _editStateStore?.Reset();
+            this.NavManager.NavigateTo("/counter");
+        }
     }
 
     public void Dispose()
